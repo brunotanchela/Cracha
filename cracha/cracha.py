@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent
 ARQUIVO_LOCAL = BASE_DIR / "concorrentes_premio.txt"
 
 st.set_page_config(page_title=f"Crachá {EVENTO}", page_icon="🎫", layout="centered")
+st.write("Faça um crachá e concorra a prêmios. Basta se registrar")
 
 # ---------------------------------------------------------------
 # FONTES
