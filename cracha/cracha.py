@@ -2,6 +2,7 @@
 import html
 import io
 import json
+import re
 import threading
 from datetime import datetime
 from functools import lru_cache
@@ -100,6 +101,43 @@ def gerar_cracha_pdf(nome):
 
 
 # ---------------------------------------------------------------
+# VALIDAÇÃO DO TELEFONE (padrão brasileiro)
+# ---------------------------------------------------------------
+DDDS_VALIDOS = {
+    "11", "12", "13", "14", "15", "16", "17", "18", "19",
+    "21", "22", "24", "27", "28",
+    "31", "32", "33", "34", "35", "37", "38",
+    "41", "42", "43", "44", "45", "46", "47", "48", "49",
+    "51", "53", "54", "55",
+    "61", "62", "63", "64", "65", "66", "67", "68", "69",
+    "71", "73", "74", "75", "77", "79",
+    "81", "82", "83", "84", "85", "86", "87", "88", "89",
+    "91", "92", "93", "94", "95", "96", "97", "98", "99",
+}
+
+MSG_TELEFONE = "Telefone inválido. Use DDD + número, por exemplo (11) 91234-5678."
+
+
+def validar_telefone(texto):
+    """Devolve (telefone_formatado, None) se válido, ou (None, mensagem_de_erro)."""
+    digitos = re.sub(r"\D", "", texto)
+    if digitos.startswith("55") and len(digitos) in (12, 13):  # aceita +55
+        digitos = digitos[2:]
+    if len(digitos) not in (10, 11):
+        return None, MSG_TELEFONE
+    ddd, numero = digitos[:2], digitos[2:]
+    if ddd not in DDDS_VALIDOS:
+        return None, f"DDD {ddd} não existe. {MSG_TELEFONE}"
+    if len(numero) == 9 and numero[0] != "9":
+        return None, "Celular com 9 dígitos deve começar com 9 depois do DDD."
+    if len(numero) == 8 and numero[0] not in "2345":
+        return None, "Telefone fixo deve começar com 2, 3, 4 ou 5 depois do DDD."
+    if len(set(numero)) == 1:
+        return None, MSG_TELEFONE
+    return f"({ddd}) {numero[:-4]}-{numero[-4:]}", None
+
+
+# ---------------------------------------------------------------
 # REGISTRO DOS PARTICIPANTES
 #   1) arquivo local (reserva; some se o app reiniciar)
 #   2) Google Planilhas via webhook (persistente) - ver SHEETS_WEBHOOK
@@ -125,20 +163,22 @@ def url_webhook():
         return ""
 
 
-def registrar_local(nome, momento):
+def registrar_local(nome, telefone, momento):
     try:
         with _trava():
             with open(ARQUIVO_LOCAL, "a", encoding="utf-8") as f:
-                f.write(f"{momento:%Y-%m-%d %H:%M:%S} | {nome}\n")
+                f.write(f"{momento:%Y-%m-%d %H:%M:%S} | {nome} | {telefone}\n")
     except OSError:
         pass
 
 
-def registrar_planilha(nome, momento):
+def registrar_planilha(nome, telefone, momento):
     url = url_webhook()
     if not url:
         return False
-    corpo = json.dumps({"nome": nome, "data": f"{momento:%Y-%m-%d %H:%M:%S}"})
+    corpo = json.dumps(
+        {"nome": nome, "telefone": telefone, "data": f"{momento:%Y-%m-%d %H:%M:%S}"}
+    )
     for _ in range(2):
         try:
             r = requests.post(
@@ -154,10 +194,10 @@ def registrar_planilha(nome, momento):
     return False
 
 
-def registrar(nome):
+def registrar(nome, telefone):
     momento = agora()
-    registrar_local(nome, momento)
-    registrar_planilha(nome, momento)
+    registrar_local(nome, telefone, momento)
+    registrar_planilha(nome, telefone, momento)
 
 
 def normalizar_nome(texto):
@@ -171,20 +211,27 @@ st.title(f"🎫 {EVENTO}")
 st.subheader("Gere o seu crachá de visitante")
 
 with st.form("form_cracha"):
-    entrada = st.text_input("Digite seu nome:", max_chars=40, placeholder="Ex.: Matheus Soares")
+    entrada_nome = st.text_input("Digite seu nome:", max_chars=40, placeholder="Ex.: Matheus Soares")
+    entrada_tel = st.text_input(
+        "Digite seu telefone (com DDD):", max_chars=20, placeholder="Ex.: (11) 91234-5678"
+    )
     enviado = st.form_submit_button("Gerar crachá", type="primary")
 
 novo = False
 if enviado:
-    nome = normalizar_nome(entrada)
+    nome = normalizar_nome(entrada_nome)
+    telefone, erro_tel = validar_telefone(entrada_tel)
     if not nome:
         st.session_state.pop("cracha", None)
         st.warning("Digite seu nome para gerar o crachá.")
+    elif erro_tel:
+        st.session_state.pop("cracha", None)
+        st.warning(erro_tel)
     else:
         registrados = st.session_state.setdefault("registrados", set())
-        if nome not in registrados:  # evita registro duplicado na mesma sessão
-            registrar(nome)
-            registrados.add(nome)
+        if (nome, telefone) not in registrados:  # evita registro duplicado na mesma sessão
+            registrar(nome, telefone)
+            registrados.add((nome, telefone))
         st.session_state["cracha"] = {"nome": nome, "pdf": gerar_cracha_pdf(nome)}
         novo = True
 
@@ -232,7 +279,7 @@ if cracha:
     if novo:
         st.balloons()
 else:
-    st.info("Digite seu nome acima e clique em “Gerar crachá”.")
+    st.info("Preencha seu nome e telefone e clique em “Gerar crachá”.")
 
 # ---------------------------------------------------------------
 # ÁREA DO ORGANIZADOR: abra o app com  ?admin=1  no final do link
@@ -251,5 +298,5 @@ if st.query_params.get("admin") == "1":
         else:
             st.write("Nenhum registro no arquivo local.")
         st.caption(
-            "Planilha conectada: " + ("sim" if url_webhook() else "NÃO (apenas arquivo local)")
+            "URL da planilha configurada: " + ("sim" if url_webhook() else "NÃO (apenas arquivo local)")
         )
