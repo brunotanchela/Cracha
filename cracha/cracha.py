@@ -24,6 +24,33 @@ BASE_DIR = Path(__file__).resolve().parent
 ARQUIVO_LOCAL = BASE_DIR / "concorrentes_premio.txt"
 
 st.set_page_config(page_title=f"Crachá {EVENTO}", page_icon="🎫", layout="centered")
+
+# ---------- TELA LIMPA: esconde barra superior, menu, Deploy e rodapé ----------
+ESTILO_LIMPO = """
+<style>
+header[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+[data-testid="stAppDeployButton"],
+.stDeployButton,
+#MainMenu,
+footer,
+[class*="viewerBadge"],
+[class*="ProfileContainer"],
+[class*="profileContainer"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+/* Sem a barra superior, reduz o espaço vazio no topo da página */
+[data-testid="stMainBlockContainer"],
+.block-container {
+    padding-top: 2rem !important;
+}
+</style>
+"""
+st.markdown(ESTILO_LIMPO, unsafe_allow_html=True)
+
 st.write("Faça um crachá e concorra a prêmios. Basta se registrar")
 
 # ---------------------------------------------------------------

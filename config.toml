@@ -1,0 +1,3 @@
+[client]
+# Esconde o menu (três pontinhos), "Deploy" e demais opções de desenvolvedor.
+toolbarMode = "minimal"
